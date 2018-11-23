@@ -1,0 +1,3 @@
+#hosts file
+[web]
+asymptote ansible_host=104.168.156.92 remote_user=ansible

@@ -1,0 +1,13 @@
+devops_users:
+  - peter
+  - ansible
+devops_group: devops
+webuser: www-data
+install_packages:
+  - nginx
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - logwatch
+
+domain: peterhalligan.com

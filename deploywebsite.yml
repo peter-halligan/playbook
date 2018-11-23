@@ -1,0 +1,162 @@
+---
+- hosts: web
+  become: yes
+  gather_facts: false
+  remote_user: root
+  tasks:
+    - name: set up for first pass on minimal install set u
+      block:
+      - name: Refresh apt cache
+        become: no
+        local_action: shell ssh -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=5 root@{{ansible_host }} apt-get update
+      - name: install sudo
+        local_action: shell ssh -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=5 root@{{ ansible_host }} apt-get install sudo
+        become: no
+      - name: Install Python-apt to pull in Python
+        become: no
+        local_action: shell ssh -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=5 root@{{ ansible_host }} sudo apt-get install --no-install-recommends --assume-yes python-apt
+
+      - name: add user group
+        group:
+          name: "{{ devops_group }}"
+          state: present
+
+      - name: add users to hosts
+        user:
+          name: "{{ item }}"
+          group: devops
+        loop: "{{ devops_users }}"
+
+      - name: add ansible key
+        authorized_key:
+          user: "{{ item }}"
+          state: present
+          key: "{{ lookup('file', '~/.ssh/id_ansible.pub') }}"
+        loop: "{{ devops_users }}"
+
+      - name: Allow 'devops' group to have passwordless sudo
+        lineinfile:
+          dest: /etc/sudoers
+          state: present
+          regexp: '^%devops'
+          line: '%devops ALL=(ALL) NOPASSWD: ALL'
+          validate: 'visudo -cf %s'
+      when: minimal_install == true
+- hosts: all
+  become: yes
+  gather_facts: true
+  tasks:
+    - name: install packages
+      apt:
+        name: "{{ install_packages }}"
+        state: present
+
+    - name: install common packages
+      include_role:
+        name: common
+
+    - name: add user group
+      group:
+        name: "{{ devops_group }}"
+        state: present
+
+    - name: add users to hosts
+      user:
+        name: "{{ item }}"
+        group: devops
+      loop: "{{ devops_users }}"
+
+    - name: add ansible key
+      authorized_key:
+        user: "{{ item }}"
+        state: present
+        key: "{{ lookup('file', '~/.ssh/id_ansible.pub') }}"
+      loop: "{{ devops_users }}"
+
+    - name: Allow 'devops' group to have passwordless sudo
+      lineinfile:
+        dest: /etc/sudoers
+        state: present
+        regexp: '^%devops'
+        line: '%devops ALL=(ALL) NOPASSWD: ALL'
+        validate: 'visudo -cf %s'
+- hosts: web
+  become: yes
+  remote_user: ansible
+  gather_facts: true
+  tasks:
+    - name: remove existing webiste dir
+      file:
+        state: absent
+        path:  /var/www/
+
+    - name: create empty root dir
+      file:
+        path:  /var/www/
+        state: directory
+        mode: 0755
+
+    - name: add new files
+      unarchive:
+        src: peterhalligan.com.gz
+        dest: /var/www/
+        owner: www-data
+        group: www-data
+        mode: 0755
+        directory_mode: yes
+
+    - name: template domain files
+      template:
+        src: peterhalligan.conf.j2
+        dest: /etc/nginx/sites-available/
+
+    - name: remove default nginx config
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/nginx/sites-available/default
+        - /etc/nginx/sites-enabled/default
+
+    - name: create link files
+      file:
+        src: /etc/nginx/sites-available/peterhalligan.conf
+        dest: /etc/nginx/sites-enabled/peterhalligan.conf
+        owner: root
+        group: root
+        force: yes
+        state: link
+
+    - name: start nginx
+      service:
+        name: nginx
+        state: started
+
+    - wait_for:
+        port: 80
+
+    - name: prevent password authentication
+      lineinfile:
+        dest: /etc/ssh/sshd_config
+        regexp: '^(#\s*)?PasswordAuthentication '
+        line: "PasswordAuthentication no"
+        state: present
+
+    - name: prevent root login
+      lineinfile:
+        dest: /etc/ssh/sshd_config
+        regexp: "^#?PermitRootLogin"
+        line: "PermitRootLogin no"
+        state: present
+
+    - name: prevent challengeResponse Authentication
+      lineinfile:
+        dest: /etc/ssh/sshd_config
+        regexp: '^UsePAM'
+        line: 'UsePAM yes'
+        state: present
+
+    - name: restart ssh
+      service:
+        name: ssh
+        state: restarted
