@@ -1,0 +1,70 @@
+---
+services: docker
+
+env:
+#  - distro: centos7
+#  - distro: centos6
+#  - distro: fedora27
+#  - distro: ubuntu1604
+#  - distro: ubuntu1404
+#  - distro: ubuntu1204
+
+  - distro: debian9
+  - distro: debian8
+  - distro: ubuntu1804
+  - distro: ubuntu1604
+
+script:
+  # Configure test script so we can run extra tests after playbook is run.
+  - export container_id=$(date +%s)
+  - export cleanup=false
+  - export DOCKER="docker exec --tty ${container_id} env TERM=xterm"
+
+  # Download test shim.
+  - wget -O ${PWD}/tests/test.sh https://gist.githubusercontent.com/tschifftner/4078cf2a8429d967d5e100649ff2caa9/raw/
+  - chmod +x ${PWD}/tests/test.sh
+
+  # Run tests.
+  - ${PWD}/tests/test.sh
+
+  # Ensure directory exists
+  - ${DOCKER} test -e /var/www/
+
+  # Check installed programs
+  - ${DOCKER} curl --version
+  - ${DOCKER} git --version
+  - ${DOCKER} zip --version
+  - ${DOCKER} unzip --version | grep 'UnZip'
+  - ${DOCKER} vim --version
+  - ${DOCKER} logrotate --version
+  - ${DOCKER} nano --version
+  - ${DOCKER} pip --version
+  - ${DOCKER} wget --version
+  - ${DOCKER} tar --version
+  - ${DOCKER} pbzip2 --version
+  - ${DOCKER} bzip2 --version
+  - ${DOCKER} mc --version | grep 'Midnight Commander'
+  - ${DOCKER} mosh --version | grep 'mosh'
+  - ${DOCKER} hdparm -V
+  - ${DOCKER} htop --version
+  - ${DOCKER} iftop --version | grep 'iftop'
+  - ${DOCKER} iotop --version
+  - ${DOCKER} ncftp -h | grep 'NcFTP'
+  - ${DOCKER} screen --version | grep 'Screen version'
+  - ${DOCKER} dig -v # dnsutils
+
+  # Ensure locales are installed
+  - ${DOCKER} locale -a | grep 'en_US.utf8'
+  - ${DOCKER} locale -a | grep 'de_DE.utf8'
+
+  # Ensure correct locale is set
+  - ${DOCKER} cat /etc/default/locale | grep 'LANG=de_DE.UTF-8'
+  - ${DOCKER} cat /etc/default/locale | grep 'LANGUAGE=de_DE.UTF-8'
+  - ${DOCKER} cat /etc/default/locale | grep 'LC_ALL=de_DE.UTF-8'
+
+after_failure:
+  - ${DOCKER} ls -la /var/www
+
+notifications:
+  slack: ambimax:2MlPTX9bY9aPxCPhJGxHKIT6
+  webhooks: https://galaxy.ansible.com/api/v1/notifications/

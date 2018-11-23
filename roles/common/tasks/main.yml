@@ -1,0 +1,18 @@
+---
+
+- name: Include debian variables
+  include_vars: debian.yml
+  when: ansible_distribution == 'Debian'
+
+- name: Include ubuntu variables
+  include_vars: ubuntu.yml
+  when: ansible_distribution == 'Ubuntu'
+
+- name: Include packages tasks
+  include: packages.yml
+
+- name: Include locale tasks
+  include: locale.yml
+
+- name: Include directory tasks
+  include: directory.yml
